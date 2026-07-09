@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Sensory Calibration Console</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style> body { margin:0; } </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+/* ============================================================================
+   TOKENS
+   ============================================================================ */
+const COLORS = {
+  bg: "#12151A", surface: "#1B1F26", surfaceRaised: "#20252D",
+  line: "rgba(255,255,255,0.08)", text: "#EDEAE3", muted: "#8B93A1",
+  amber: "#E8A33D", teal: "#4FB8AE", blue: "#6FA3D8", rose: "#D8756B",
+};
+const FONT_DISPLAY = "'Space Grotesk', sans-serif";
+const FONT_BODY = "'Inter', sans-serif";
+const FONT_MONO = "'JetBrains Mono', monospace";
+
+/* ============================================================================
+   Minimal inline SVG icon set (zero external icon dependency)
+   ============================================================================ */
+const Icon = ({ size = 16, color = "currentColor", strokeWidth = 2, children }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+       strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    {children}
+  </svg>
+);
+const GaugeIcon = (p) => <Icon {...p}><path d="M12 15 L16 10" /><circle cx="12" cy="15" r="1" /><path d="M4 15a8 8 0 1 1 16 0" /></Icon>;
+const WavesIcon = (p) => <Icon {...p}><path d="M2 12c1.5 1.5 3 1.5 4.5 0s3-1.5 4.5 0 3 1.5 4.5 0 3-1.5 4.5 0" /><path d="M2 18c1.5 1.5 3 1.5 4.5 0s3-1.5 4.5 0 3 1.5 4.5 0 3-1.5 4.5 0" /></Icon>;
+const DropletIcon = (p) => <Icon {...p}><path d="M12 2s6 7 6 12a6 6 0 0 1-12 0c0-5 6-12 6-12z" /></Icon>;
+const ArrowLeftRightIcon = (p) => <Icon {...p}><path d="M8 3 4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></Icon>;
+const LayersIcon = (p) => <Icon {...p}><path d="M12 2 2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></Icon>;
+const HandIcon = (p) => <Icon {...p}><path d="M18 11V6a2 2 0 0 0-4 0v5" /><path d="M14 10V4a2 2 0 0 0-4 0v7" /><path d="M10 10.5V6a2 2 0 0 0-4 0v9" /><path d="M6 15v-2" /><path d="M6 15a6 6 0 0 0 12 0v-3" /></Icon>;
+const MoveIcon = (p) => <Icon {...p}><path d="M12 2v20M2 12h20" /><path d="M12 2l3 3M12 2l-3 3M12 22l3-3M12 22l-3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3" /></Icon>;
+const WindIcon = (p) => <Icon {...p}><path d="M2 8h13a3 3 0 1 0-3-3" /><path d="M2 16h17a3 3 0 1 1-3 3" /></Icon>;
+const MagnetIcon = (p) => <Icon {...p}><path d="M6 15V9a6 6 0 0 1 12 0v6" /><path d="M6 15h4" /><path d="M14 15h4" /></Icon>;
+const ArrowRightIcon = (p) => <Icon {...p}><path d="M5 12h14" /><path d="M13 6l6 6-6 6" /></Icon>;
+const RotateCcwIcon = (p) => <Icon {...p}><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 3v6h6" /></Icon>;
+const ChevronLeftIcon = (p) => <Icon {...p}><path d="M15 18l-6-6 6-6" /></Icon>;
+
+/* ============================================================================
+   Rheological / tribological input parameters
+   ============================================================================ */
+const RHEO_PARAMS = [
+  { key: "yield_stress", label: "Yield Stress", unit: "Pa", icon: GaugeIcon },
+  { key: "crossover_stress", label: "Crossover Stress", unit: "Pa", icon: WavesIcon },
+  { key: "viscosity", label: "Viscosity", unit: "cP", icon: DropletIcon },
+  { key: "cof", label: "Coefficient of Friction", unit: "—", icon: ArrowLeftRightIcon },
+  { key: "adhesive_force", label: "Adhesive Force", unit: "N", icon: LayersIcon },
+];
+
+const SENSORY_ATTRS = [
+  { key: "pickup", label: "Pickup", predictors: ["yield_stress", "crossover_stress"], color: COLORS.amber, icon: HandIcon },
+  { key: "spreadability", label: "Spreadability", predictors: ["viscosity"], color: COLORS.teal, icon: MoveIcon },
+  { key: "glide", label: "Glide", predictors: ["cof"], color: COLORS.blue, icon: WindIcon },
+  { key: "tackiness", label: "Tackiness", predictors: ["adhesive_force"], color: COLORS.rose, icon: MagnetIcon },
+];
+
+const DEFAULT_ROW = {
+  yield_stress: "", crossover_stress: "", viscosity: "", cof: "", adhesive_force: "",
+  pickup: "", spreadability: "", glide: "", tackiness: "",
+};
+
+/* Seed values re-baselined for a 0–15 sensory scale */
+const SEED_ROWS = [
+  { yield_stress: "120", crossover_stress: "5", viscosity: "15000", cof: "0.35", adhesive_force: "0.8",
+    pickup: "10", spreadability: "9", glide: "7", tackiness: "6" },
+  { yield_stress: "200", crossover_stress: "8", viscosity: "25000", cof: "0.55", adhesive_force: "1.5",
+    pickup: "7", spreadability: "6", glide: "4", tackiness: "10" },
+];
+
+/* ============================================================================
+   LINEAR ALGEBRA helpers
+   ============================================================================ */
+const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+const std = (arr, m) => Math.sqrt(arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length);
+const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+const norm = (v) => Math.sqrt(dot(v, v));
+const transpose = (A) => A[0].map((_, j) => A.map((row) => row[j]));
+const matVec = (A, v) => A.map((row) => dot(row, v));
+const outer = (t, p) => t.map((ti) => p.map((pj) => ti * pj));
+const subMat = (A, B) => A.map((row, i) => row.map((v, j) => v - B[i][j]));
+const matMat = (A, B) => {
+  const m = B[0].length;
+  return A.map((row) => {
+    const out = [];
+    for (let j = 0; j < m; j++) {
+      let s = 0;
+      for (let l = 0; l < row.length; l++) s += row[l] * B[l][j];
+      out.push(s);
+    }
+    return out;
+  });
+};
+const invSmall = (M) => {
+  if (M.length === 1) return [[1 / M[0][0]]];
+  const [[a, b], [c, d]] = M;
+  const det = a * d - b * c || 1e-9;
+  return [[d / det, -b / det], [-c / det, a / det]];
+};
+
+function standardizeColumns(X) {
+  const p = X[0].length;
+  const means = [], stds = [];
+  for (let j = 0; j < p; j++) {
+    const col = X.map((r) => r[j]);
+    const m = mean(col);
+    let s = std(col, m);
+    if (s === 0) s = 1;
+    means.push(m);
+    stds.push(s);
+  }
+  const Xs = X.map((row) => row.map((v, j) => (v - means[j]) / stds[j]));
+  return { Xs, means, stds };
+}
+
+/* PLS1 (NIPALS) — verified against the standard algorithm:
+   w = X'y/||X'y|| -> t = Xw -> p = X't/(t't) -> q = y't/(t't)
+   -> deflate X,y -> repeat -> B = W(P'W)^-1 q                       */
+function fitPLS1(X, y) {
+  const n = X.length, p = X[0].length;
+  const ncomp = Math.max(1, Math.min(p, n - 1));
+  const { Xs, means, stds } = standardizeColumns(X);
+  const yMean = mean(y);
+  let yk = y.map((v) => v - yMean);
+  let Xk = Xs.map((row) => [...row]);
+  const Wc = [], Pc = [], Qc = [];
+  for (let a = 0; a < ncomp; a++) {
+    const XtY = transpose(Xk).map((row) => dot(row, yk));
+    const wn = norm(XtY) || 1;
+    const w = XtY.map((v) => v / wn);
+    const t = matVec(Xk, w);
+    const tt = dot(t, t) || 1e-9;
+    const pLoad = transpose(Xk).map((row) => dot(row, t) / tt);
+    const q = dot(yk, t) / tt;
+    Xk = subMat(Xk, outer(t, pLoad));
+    yk = yk.map((v, i) => v - t[i] * q);
+    Wc.push(w); Pc.push(pLoad); Qc.push(q);
+  }
+  const Wmat = transpose(Wc);
+  const Pmat = transpose(Pc);
+  const PtW = matMat(transpose(Pmat), Wmat);
+  const PtWinv = invSmall(PtW);
+  const Wpinv = matMat(Wmat, PtWinv);
+  const B = matMat(Wpinv, Qc.map((q) => [q])).map((r) => r[0]);
+  return { means, stds, B, yMean, ncomp };
+}
+
+function predictPLS1(model, xRaw) {
+  const { means, stds, B, yMean } = model;
+  const xs = xRaw.map((v, j) => (v - means[j]) / stds[j]);
+  return dot(xs, B) + yMean;
+}
+
+/* ============================================================================
+   MODEL DIAGNOSTICS — R², leave-one-out Q², RMSE
+   ============================================================================ */
+function computeDiagnostics(X, y, model) {
+  const n = y.length;
+  const yMeanAll = mean(y);
+  const ssTot = y.reduce((s, v) => s + (v - yMeanAll) ** 2, 0) || 1e-9;
+
+  const fitted = X.map((x) => predictPLS1(model, x));
+  const ssRes = y.reduce((s, v, i) => s + (v - fitted[i]) ** 2, 0);
+  const r2 = 1 - ssRes / ssTot;
+  const rmse = Math.sqrt(ssRes / n);
+
+  let q2 = null;
+  if (n >= 3) {
+    let press = 0;
+    for (let i = 0; i < n; i++) {
+      const Xtrain = X.filter((_, idx) => idx !== i);
+      const ytrain = y.filter((_, idx) => idx !== i);
+      const mdl = fitPLS1(Xtrain, ytrain);
+      const pred = predictPLS1(mdl, X[i]);
+      press += (y[i] - pred) ** 2;
+    }
+    q2 = 1 - press / ssTot;
+  }
+  return { r2, q2, rmse, n };
+}
+
+function confidenceLabel(q2) {
+  if (q2 === null) return { text: "Insufficient data", color: COLORS.muted };
+  if (q2 >= 0.5) return { text: "High", color: COLORS.teal };
+  if (q2 >= 0.3) return { text: "Moderate", color: COLORS.amber };
+  return { text: "Low", color: COLORS.rose };
+}
+
+/* ============================================================================
+   GAUGE — 0 to 15 scale
+   ============================================================================ */
+function polar(cx, cy, r, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
+}
+
+const MAX_SCALE = 15;
+
+function GaugeDial({ label, value, color, IconComp }) {
+  const cx = 100, cy = 104, r = 82;
+  const clamped = Math.max(0, Math.min(MAX_SCALE, value));
+  const valueAngle = 180 - (clamped / MAX_SCALE) * 180;
+  const track = (() => {
+    const s = polar(cx, cy, r, 180);
+    const e = polar(cx, cy, r, 0);
+    return `M ${s.x} ${s.y} A ${r} ${r} 0 1 1 ${e.x} ${e.y}`;
+  })();
+  const fill = (() => {
+    const s = polar(cx, cy, r, 180);
+    const e = polar(cx, cy, r, valueAngle);
+    const largeArc = 180 - valueAngle > 180 ? 1 : 0;
+    return `M ${s.x} ${s.y} A ${r} ${r} 0 ${largeArc} 1 ${e.x} ${e.y}`;
+  })();
+  const needle = polar(cx, cy, r - 14, valueAngle);
+  const ticks = [0, 3, 6, 9, 12, 15];
+
+  return (
+    <div className="flex flex-col items-center" style={{ width: 200 }}>
+      <svg viewBox="0 0 200 130" width="100%" style={{ overflow: "visible" }}>
+        <path d={track} stroke={COLORS.line} strokeWidth="10" fill="none" strokeLinecap="round" />
+        <path d={fill} stroke={color} strokeWidth="10" fill="none" strokeLinecap="round"
+          style={{ transition: "d 900ms cubic-bezier(0.22,1,0.36,1)", filter: `drop-shadow(0 0 6px ${color}88)` }} />
+        {ticks.map((t) => {
+          const a = 180 - (t / MAX_SCALE) * 180;
+          const o = polar(cx, cy, r + 12, a);
+          return (
+            <text key={t} x={o.x} y={o.y} fontSize="9" fill={COLORS.muted} fontFamily={FONT_MONO}
+              textAnchor="middle" dominantBaseline="middle">{t}</text>
+          );
+        })}
+        <line x1={cx} y1={cy} x2={needle.x} y2={needle.y} stroke={COLORS.text} strokeWidth="2.5"
+          strokeLinecap="round" style={{ transition: "all 900ms cubic-bezier(0.22,1,0.36,1)" }} />
+        <circle cx={cx} cy={cy} r="5" fill={color} />
+      </svg>
+      <div className="flex items-center gap-1.5 -mt-2">
+        <IconComp size={14} color={color} strokeWidth={2} />
+        <span style={{ fontFamily: FONT_BODY, color: COLORS.muted, fontSize: 12, letterSpacing: "0.04em" }}>
+          {label.toUpperCase()}
+        </span>
+      </div>
+      <div style={{ fontFamily: FONT_MONO, color: COLORS.text, fontSize: 26, fontWeight: 600, marginTop: 2 }}>
+        {value.toFixed(2)} <span style={{ fontSize: 13, color: COLORS.muted }}>/{MAX_SCALE}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================================
+   SMALL UI ATOMS
+   ============================================================================ */
+function StepPill({ n, label, active, done }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center justify-center rounded-full" style={{
+        width: 26, height: 26,
+        border: `1px solid ${active || done ? COLORS.amber : COLORS.line}`,
+        color: active || done ? COLORS.amber : COLORS.muted,
+        fontFamily: FONT_MONO, fontSize: 12,
+        background: active ? "rgba(232,163,61,0.1)" : "transparent",
+        transition: "all 300ms ease",
+      }}>{n}</div>
+      <span style={{ fontFamily: FONT_DISPLAY, fontSize: 13, letterSpacing: "0.08em", color: active ? COLORS.text : COLORS.muted }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function NumField({ value, onChange, unit, placeholder }) {
+  return (
+    <div className="relative">
+      <input type="number" step="any" value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder || "0"} className="w-full rounded-md focus:outline-none"
+        style={{ background: COLORS.surfaceRaised, border: `1px solid ${COLORS.line}`, color: COLORS.text,
+          fontFamily: FONT_MONO, fontSize: 14, padding: "8px 36px 8px 10px" }}
+        onFocus={(e) => (e.target.style.borderColor = COLORS.amber)}
+        onBlur={(e) => (e.target.style.borderColor = COLORS.line)} />
+      {unit && (
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
+          style={{ color: COLORS.muted, fontFamily: FONT_MONO, fontSize: 11 }}>{unit}</span>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================================
+   MAIN APP
+   ============================================================================ */
+function SensoryConsole() {
+  const [phase, setPhase] = useState(1);
+  const [countSet, setCountSet] = useState(false);
+  const [numSamples, setNumSamples] = useState(2);
+  const [rows, setRows] = useState(SEED_ROWS);
+  const [newSample, setNewSample] = useState({
+    yield_stress: "", crossover_stress: "", viscosity: "", cof: "", adhesive_force: "",
+  });
+  const [models, setModels] = useState(null);
+  const [predictions, setPredictions] = useState(null);
+  const [error, setError] = useState("");
+
+  const applyCount = () => {
+    const n = Math.max(2, Math.min(12, Number(numSamples) || 2));
+    setNumSamples(n);
+    const next = Array.from({ length: n }, (_, i) => rows[i] || { ...DEFAULT_ROW });
+    setRows(next);
+    setCountSet(true);
+  };
+
+  const updateRow = (i, key, val) => {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [key]: val } : r)));
+  };
+
+  const allFields = [...RHEO_PARAMS.map((p) => p.key), ...SENSORY_ATTRS.map((s) => s.key)];
+
+  const calibrate = () => {
+    for (const row of rows) {
+      for (const k of allFields) {
+        if (row[k] === "" || isNaN(Number(row[k]))) {
+          setError("Fill in every cell of the reference table with a numeric value before calibrating.");
+          return;
+        }
+      }
+    }
+    setError("");
+    const fitted = {};
+    for (const attr of SENSORY_ATTRS) {
+      const X = rows.map((r) => attr.predictors.map((k) => Number(r[k])));
+      const y = rows.map((r) => Number(r[attr.key]));
+      const model = fitPLS1(X, y);
+      const diagnostics = computeDiagnostics(X, y, model);
+      fitted[attr.key] = { ...model, diagnostics };
+    }
+    setModels(fitted);
+    setPhase(2);
+  };
+
+  const runPrediction = () => {
+    for (const p of RHEO_PARAMS) {
+      if (newSample[p.key] === "" || isNaN(Number(newSample[p.key]))) {
+        setError("Fill in every rheological / tribological field for the new sample.");
+        return;
+      }
+    }
+    setError("");
+    const preds = {};
+    for (const attr of SENSORY_ATTRS) {
+      const xRaw = attr.predictors.map((k) => Number(newSample[k]));
+      const value = predictPLS1(models[attr.key], xRaw);
+      const { rmse, r2, q2 } = models[attr.key].diagnostics;
+      const margin = 1.96 * rmse;
+      preds[attr.key] = {
+        value,
+        low: Math.max(0, value - margin),
+        high: Math.min(MAX_SCALE, value + margin),
+        r2, q2, rmse,
+      };
+    }
+    setPredictions(preds);
+    setPhase(3);
+  };
+
+  const resetAll = () => {
+    setPhase(1); setCountSet(false); setModels(null); setPredictions(null); setError("");
+    setNewSample({ yield_stress: "", crossover_stress: "", viscosity: "", cof: "", adhesive_force: "" });
+  };
+
+  return (
+    <div className="min-h-screen w-full" style={{ background: COLORS.bg, fontFamily: FONT_BODY, color: COLORS.text }}>
+      <div className="max-w-3xl mx-auto px-5 py-10">
+        <div className="mb-8">
+          <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: COLORS.amber, letterSpacing: "0.16em" }}>
+            RHEOLOGY + TRIBOLOGY → SENSORY PANEL
+          </div>
+          <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 600, marginTop: 4, lineHeight: 1.15 }}>
+            Sensory Calibration Console
+          </h1>
+          <p style={{ color: COLORS.muted, fontSize: 14, marginTop: 6, maxWidth: 560 }}>
+            Set a reference table from measured samples, calibrate a PLS regression per
+            attribute, then read off predicted sensory scores (0–15 scale) for a new sample,
+            along with a confidence indicator for each prediction.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pb-5 mb-7" style={{ borderBottom: `1px solid ${COLORS.line}` }}>
+          <StepPill n="01" label="REFERENCE SET" active={phase === 1} done={phase > 1} />
+          <StepPill n="02" label="MEASURE SAMPLE" active={phase === 2} done={phase > 2} />
+          <StepPill n="03" label="READOUT" active={phase === 3} done={false} />
+        </div>
+
+        {error && (
+          <div className="mb-5 rounded-md px-4 py-3"
+            style={{ background: "rgba(216,117,107,0.1)", border: `1px solid ${COLORS.rose}55`, color: COLORS.rose, fontSize: 13 }}>
+            {error}
+          </div>
+        )}
+
+        {phase === 1 && (
+          <div className="space-y-6">
+            {!countSet ? (
+              <div className="rounded-lg p-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: 15, marginBottom: 4 }}>
+                  How many reference samples do you have?
+                </div>
+                <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
+                  Each sample needs both its instrumental readings and its sensory panel
+                  scores (0–15). Minimum 2 to calibrate; 3 or more is needed to compute a
+                  cross-validated confidence score (Q²).
+                </p>
+                <div className="flex items-center gap-3">
+                  <input type="number" min={2} max={12} value={numSamples}
+                    onChange={(e) => setNumSamples(e.target.value)} className="rounded-md focus:outline-none"
+                    style={{ width: 90, background: COLORS.surfaceRaised, border: `1px solid ${COLORS.line}`,
+                      color: COLORS.text, fontFamily: FONT_MONO, fontSize: 16, padding: "8px 10px" }} />
+                  <button onClick={applyCount} className="flex items-center gap-2 rounded-md px-4 py-2"
+                    style={{ background: COLORS.amber, color: COLORS.bg, fontFamily: FONT_DISPLAY, fontSize: 13, fontWeight: 600 }}>
+                    Build Table <ArrowRightIcon size={15} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-lg overflow-x-auto" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+                  <table className="w-full" style={{ borderCollapse: "collapse", minWidth: 760 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${COLORS.line}` }}>
+                        <th style={{ padding: "10px 12px", textAlign: "left", fontFamily: FONT_DISPLAY, fontSize: 11, color: COLORS.muted, letterSpacing: "0.06em" }}>SAMPLE</th>
+                        {RHEO_PARAMS.map((p) => (
+                          <th key={p.key} style={{ padding: "10px 8px", textAlign: "left", fontFamily: FONT_DISPLAY, fontSize: 11, color: COLORS.muted }}>
+                            <div className="flex items-center gap-1">
+                              <p.icon size={12} color={COLORS.amber} />
+                              {p.label}
+                              <span style={{ color: COLORS.muted, fontWeight: 400 }}>({p.unit})</span>
+                            </div>
+                          </th>
+                        ))}
+                        {SENSORY_ATTRS.map((s) => (
+                          <th key={s.key} style={{ padding: "10px 8px", textAlign: "left", fontFamily: FONT_DISPLAY, fontSize: 11, color: s.color }}>
+                            <div className="flex items-center gap-1">
+                              <s.icon size={12} color={s.color} />
+                              {s.label}
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${COLORS.line}` }}>
+                          <td style={{ padding: "8px 12px", fontFamily: FONT_MONO, fontSize: 13, color: COLORS.muted }}>S{i + 1}</td>
+                          {RHEO_PARAMS.map((p) => (
+                            <td key={p.key} style={{ padding: "6px 6px", minWidth: 110 }}>
+                              <NumField value={row[p.key]} onChange={(v) => updateRow(i, p.key, v)} />
+                            </td>
+                          ))}
+                          {SENSORY_ATTRS.map((s) => (
+                            <td key={s.key} style={{ padding: "6px 6px", minWidth: 90 }}>
+                              <NumField value={row[s.key]} onChange={(v) => updateRow(i, s.key, v)} />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <button onClick={() => setCountSet(false)} className="flex items-center gap-1"
+                    style={{ color: COLORS.muted, fontFamily: FONT_BODY, fontSize: 13 }}>
+                    <ChevronLeftIcon size={15} /> Change sample count
+                  </button>
+                  <button onClick={calibrate} className="flex items-center gap-2 rounded-md px-4 py-2"
+                    style={{ background: COLORS.amber, color: COLORS.bg, fontFamily: FONT_DISPLAY, fontSize: 13, fontWeight: 600 }}>
+                    Calibrate Model <ArrowRightIcon size={15} />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {phase === 2 && (
+          <div className="space-y-6">
+            <div className="rounded-lg p-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 15, marginBottom: 4 }}>
+                Enter the new sample's instrumental readings
+              </div>
+              <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 16 }}>
+                The model calibrated on your {numSamples} reference samples will convert these
+                into predicted sensory scores, each with a confidence indicator.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {RHEO_PARAMS.map((p) => (
+                  <div key={p.key}>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <p.icon size={13} color={COLORS.amber} />
+                      <span style={{ fontSize: 12, color: COLORS.muted, fontFamily: FONT_BODY }}>{p.label}</span>
+                    </div>
+                    <NumField value={newSample[p.key]} onChange={(v) => setNewSample((prev) => ({ ...prev, [p.key]: v }))} unit={p.unit} />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <button onClick={() => setPhase(1)} className="flex items-center gap-1"
+                style={{ color: COLORS.muted, fontFamily: FONT_BODY, fontSize: 13 }}>
+                <ChevronLeftIcon size={15} /> Back to reference set
+              </button>
+              <button onClick={runPrediction} className="flex items-center gap-2 rounded-md px-4 py-2"
+                style={{ background: COLORS.amber, color: COLORS.bg, fontFamily: FONT_DISPLAY, fontSize: 13, fontWeight: 600 }}>
+                Run Prediction <ArrowRightIcon size={15} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {phase === 3 && predictions && (
+          <div className="space-y-8">
+            <div className="rounded-lg p-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 13, color: COLORS.muted, marginBottom: 18, letterSpacing: "0.05em" }}>
+                PREDICTED SENSORY READOUT (SCALE 0–15)
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 justify-items-center">
+                {SENSORY_ATTRS.map((attr) => {
+                  const p = predictions[attr.key];
+                  const conf = confidenceLabel(p.q2);
+                  return (
+                    <div key={attr.key} className="flex flex-col items-center">
+                      <GaugeDial label={attr.label} value={p.value} color={attr.color} IconComp={attr.icon} />
+                      <div className="mt-2 text-center" style={{ fontFamily: FONT_MONO, fontSize: 11, color: COLORS.muted }}>
+                        Range: {p.low.toFixed(1)}–{p.high.toFixed(1)}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full"
+                        style={{ border: `1px solid ${conf.color}55`, background: `${conf.color}15` }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 999, background: conf.color, display: "inline-block" }} />
+                        <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: conf.color }}>{conf.text} confidence</span>
+                      </div>
+                      <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: COLORS.muted, marginTop: 3, textAlign: "center" }}>
+                        R²={p.r2.toFixed(2)} {p.q2 !== null ? `· Q²=${p.q2.toFixed(2)}` : "· Q²=n/a (need ≥3 samples)"}
+                        <br />RMSE={p.rmse.toFixed(2)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-6 pt-4" style={{ borderTop: `1px solid ${COLORS.line}`, color: COLORS.muted, fontSize: 11.5, lineHeight: 1.5 }}>
+                ⚠ <b>Reading this responsibly:</b> R² reflects fit to the reference samples;
+                Q² (leave-one-out cross-validation) is a more honest estimate of predictive
+                power but requires at least 3 reference samples. The ± range around each
+                prediction is an approximate uncertainty band (±1.96×RMSE), not a certified
+                statistical confidence interval. With small reference panels, treat all of
+                this as directional guidance for further investigation — not as a substitute
+                for expert sensory/statistical review before making formulation decisions.
+              </div>
+            </div>
+
+            <div className="rounded-lg overflow-x-auto" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+              <div style={{ padding: "12px 14px 0", fontFamily: FONT_DISPLAY, fontSize: 12, color: COLORS.muted }}>
+                REFERENCE TABLE USED FOR CALIBRATION
+              </div>
+              <table className="w-full" style={{ borderCollapse: "collapse", minWidth: 760 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${COLORS.line}` }}>
+                    <th style={{ padding: "10px 12px", textAlign: "left", fontFamily: FONT_MONO, fontSize: 11, color: COLORS.muted }}>SAMPLE</th>
+                    {RHEO_PARAMS.map((p) => (
+                      <th key={p.key} style={{ padding: "10px 8px", textAlign: "left", fontFamily: FONT_MONO, fontSize: 11, color: COLORS.muted }}>{p.label}</th>
+                    ))}
+                    {SENSORY_ATTRS.map((s) => (
+                      <th key={s.key} style={{ padding: "10px 8px", textAlign: "left", fontFamily: FONT_MONO, fontSize: 11, color: s.color }}>{s.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => (
+                    <tr key={i} style={{ borderBottom: `1px solid ${COLORS.line}` }}>
+                      <td style={{ padding: "8px 12px", fontFamily: FONT_MONO, fontSize: 13, color: COLORS.muted }}>S{i + 1}</td>
+                      {RHEO_PARAMS.map((p) => (
+                        <td key={p.key} style={{ padding: "8px 8px", fontFamily: FONT_MONO, fontSize: 13 }}>{row[p.key]}</td>
+                      ))}
+                      {SENSORY_ATTRS.map((s) => (
+                        <td key={s.key} style={{ padding: "8px 8px", fontFamily: FONT_MONO, fontSize: 13 }}>{row[s.key]}</td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr>
+                    <td style={{ padding: "8px 12px", fontFamily: FONT_MONO, fontSize: 13, color: COLORS.amber }}>S{numSamples + 1} (new)</td>
+                    {RHEO_PARAMS.map((p) => (
+                      <td key={p.key} style={{ padding: "8px 8px", fontFamily: FONT_MONO, fontSize: 13, color: COLORS.amber }}>{newSample[p.key]}</td>
+                    ))}
+                    {SENSORY_ATTRS.map((s) => (
+                      <td key={s.key} style={{ padding: "8px 8px", fontFamily: FONT_MONO, fontSize: 13, color: COLORS.amber }}>
+                        {predictions[s.key].value.toFixed(2)}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <button onClick={() => setPhase(2)} className="flex items-center gap-1"
+                style={{ color: COLORS.muted, fontFamily: FONT_BODY, fontSize: 13 }}>
+                <ChevronLeftIcon size={15} /> Measure another sample
+              </button>
+              <button onClick={resetAll} className="flex items-center gap-2 rounded-md px-4 py-2"
+                style={{ background: "transparent", border: `1px solid ${COLORS.line}`, color: COLORS.text, fontFamily: FONT_DISPLAY, fontSize: 13 }}>
+                <RotateCcwIcon size={14} /> Recalibrate from scratch
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<SensoryConsole />);
+</script>
+</body>
+</html>
